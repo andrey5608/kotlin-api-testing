@@ -1,0 +1,16 @@
+# Base test configuration — committed, no secrets here.
+# Override any value locally by creating src/test/resources/config.local.yml (git-ignored).
+
+baseUrl: https://account.jetbrains.com/api/v1
+
+# Your customer code as shown in JetBrains Account next to the company name.
+customerCode: 6703615
+
+# ID of the team that holds unassigned licenses used for assign / transfer tests.
+sourceTeamId: 2785745
+
+# ID of a different team — destination for changeLicensesTeam tests.
+targetTeamId: 2222
+
+# Email of an org member used as the license assignee in positive tests.
+testUserEmail: qa.automation@example.com

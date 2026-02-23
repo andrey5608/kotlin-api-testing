@@ -25,3 +25,20 @@ replay_pid*
 
 # Kotlin Gradle plugin data, see https://kotlinlang.org/docs/whatsnew20.html#new-directory-for-kotlin-data-in-gradle-projects
 .kotlin/
+/.playwright-mcp
+.DS_Store
+
+# Maven build output
+target/
+
+# Local environment variables — NEVER commit
+.env.local
+*.env
+
+# Local test config override — NEVER commit
+src/test/resources/config.local.yml
+
+# IDE
+.idea/
+*.iml
+/docs/qa/files

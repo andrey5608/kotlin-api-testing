@@ -1,0 +1,9 @@
+# Local developer overrides — copy this file to config.local.yml and fill in your values.
+# config.local.yml is git-ignored and never committed.
+# Only specify the values you want to override; everything else is inherited from config.yml.
+
+# baseUrl: https://account.jetbrains.com/api/v1
+# customerCode: 123456
+# sourceTeamId: 1111
+# targetTeamId: 2222
+# testUserEmail: qa.automation@example.com
