@@ -2,9 +2,12 @@ package com.api.testing.license.team
 
 import com.api.testing.base.BaseApiTest
 import com.api.testing.config.TestConfig
+import com.api.testing.extensions.LicenseCleanupExtension
 import com.api.testing.models.request.ChangeTeamRequest
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Tag
@@ -16,7 +19,7 @@ import org.junit.jupiter.api.Test
  * Positive:
  * CT-P01  Transfer single license to TARGET_TEAM_ID.
  * CT-P02  Transfer multiple licenses.
- * CT-P03  Mixed: some transferable (free), some not (recently assigned).  [see TODO below]
+ * CT-P03  Mixed: one isTransferableBetweenTeams=true (moves) + one =false (stays in source).
  *
  * Negative:
  * CT-N01  Non-existent targetTeamId = 0              → 400
@@ -38,12 +41,21 @@ class ChangeLicensesTeamTest : BaseApiTest() {
     /** IDs transferred to TARGET during this test — restored in @AfterEach. */
     private val transferredIds = mutableListOf<String>()
 
+    /** Licenses assigned in test Arrange blocks — revoked in @AfterEach. */
+    private val cleanup = LicenseCleanupExtension()
+
     /**
      * All changeLicensesTeam endpoints require a customer-scoped token.
      * Skip every test in this class with a clear message when a team-scoped token is detected.
      */
     @BeforeEach
     fun requireCustomerToken() = assumeCustomerToken()
+
+    @AfterEach
+    fun cleanupAssignedLicenses() = cleanup.cleanupNow()
+
+    @AfterAll
+    fun closeCleanup() = cleanup.close()
 
     @AfterEach
     fun restoreToSourceTeam() {
@@ -155,21 +167,78 @@ class ChangeLicensesTeamTest : BaseApiTest() {
         transferredIds += ids
 
         // All IDs appear in response list
-        // TODO: if API returns separate transferred/notTransferred, update assertion (plan Open Q #4)
         assertThat(response.body?.licenseIds)
             .withFailMessage("Expected transferred licenseIds in response but got: %s", response.rawBody)
             .isNotNull
             .containsAll(ids)
     }
 
-    // TODO: implement once the partial-success response shape is confirmed via a live call.
-    //       (See plan Open Question #4 — swagger only defines 'licenseIds'; 'notTransferred' may
-    //        exist in practice.) Stub is left here as a reminder.
-    //
-    // @Test
-    // @Tag("positive")
-    // @DisplayName("Mix of transferable and non-transferable licenses returns partial success")
-    // fun `partial transfer returns 200 with transferred and notTransferred lists`() { TODO() }
+    @Test
+    @Tag("positive")
+    @DisplayName("Mixed licenses: isTransferableBetweenTeams=false stays in source, =true moves to target")
+    fun mixedTransferPartiallySucceeds() {
+        // Arrange — need one license with isTransferableBetweenTeams=false (non-transferable)
+        // and one with isTransferableBetweenTeams=true + isAvailableToAssign=true (transferable).
+        // Query all licenses in source team (no assignment-status filter) to find non-transferable ones.
+        val allLicensesResponse = client.getLicenses(teamId = TestConfig.sourceTeamId)
+        if (allLicensesResponse.statusCode != 200)
+            error("Arrange failed: GET /customer/licenses returned ${allLicensesResponse.statusCode}. Body: ${allLicensesResponse.rawBody}")
+
+        val allLicenses = allLicensesResponse.body ?: emptyList()
+
+        val nonTransferableId = allLicenses
+            .firstOrNull { it.isTransferableBetweenTeams == false }
+            ?.licenseId
+        assumeTrue(
+            nonTransferableId != null,
+            "Skipping CT-P03: no isTransferableBetweenTeams=false license in " +
+                "SOURCE_TEAM_ID=${TestConfig.sourceTeamId}. Add a non-transferable license to cover this case."
+        )
+
+        ensureAssignableLicenses(needed = 1, transferable = true)
+        val transferableId = client.getLicenses(
+            assignmentStatus = "UNASSIGNED",
+            teamId = TestConfig.sourceTeamId
+        ).body
+            ?.firstOrNull { it.isTransferableBetweenTeams == true && it.isAvailableToAssign == true }
+            ?.licenseId
+            ?: error("Arrange failed: no isTransferableBetweenTeams=true + isAvailableToAssign=true license in SOURCE_TEAM.")
+
+        val request = ChangeTeamRequest(
+            licenseIds = listOf(transferableId, nonTransferableId!!),
+            targetTeamId = TestConfig.targetTeamId
+        )
+
+        // Act
+        val response = client.changeLicensesTeam(request)
+
+        // Log raw response — reveals actual field names for transferred vs. blocked licenses
+        println("[CT-P03] Raw response body: ${response.rawBody}")
+
+        // Assert — 200
+        assertThat(response.statusCode)
+            .withFailMessage("Expected 200 but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(200)
+
+        // transferable license must be in TARGET_TEAM
+        transferredIds += transferableId
+        val targetLicenses = client.getTeamLicenses(TestConfig.targetTeamId)
+        assertThat(targetLicenses.statusCode).isEqualTo(200)
+        assertThat(targetLicenses.body?.any { it.licenseId == transferableId })
+            .withFailMessage(
+                "Expected transferable license $transferableId to be in TARGET_TEAM after transfer.\n" +
+                    "Target team licenses: ${targetLicenses.rawBody}"
+            )
+            .isTrue
+
+        // non-transferable license must NOT be in TARGET_TEAM
+        assertThat(targetLicenses.body?.any { it.licenseId == nonTransferableId })
+            .withFailMessage(
+                "Non-transferable license $nonTransferableId (isTransferableBetweenTeams=false) " +
+                    "should NOT be in TARGET_TEAM.\nTarget team licenses: ${targetLicenses.rawBody}"
+            )
+            .isFalse
+    }
 
     // =========================================================================
     // Negative
