@@ -68,3 +68,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-history
+
+      - name: Print report URL
+        if: always()
+        run: |
+          echo "📊 Allure report: https://andrey5608.github.io/kotlin-api-testing/${{ github.run_number }}/" | tee -a $GITHUB_STEP_SUMMARY

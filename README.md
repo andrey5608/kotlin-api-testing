@@ -71,8 +71,12 @@ src/test/kotlin/.../
 
 ## CI
 
-GitHub Actions (`.github/workflows/api-tests.yml`). Requires `ORG_ADMIN_API_KEY` repository secret.  
-Allure report uploaded as artifact on every run (retained 14 days).
+GitHub Actions (`.github/workflows/api-tests.yml`). Requires `ORG_ADMIN_API_KEY` repository secret.
+
+**Test report (Allure, updated on every run):**  
+https://andrey5608.github.io/kotlin-api-testing/
+
+Allure report is also uploaded as a build artifact on every run (retained 14 days).
 
 ## Common Issues
 
