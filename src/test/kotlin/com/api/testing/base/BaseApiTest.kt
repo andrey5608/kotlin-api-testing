@@ -42,6 +42,9 @@ abstract class BaseApiTest {
                 response.statusCode, response.rawBody
             )
             .isEqualTo(200)
+        assertThat(response.body)
+            .withFailMessage("GET /token returned 200 but body could not be parsed.\nRaw: %s", response.rawBody)
+            .isNotNull()
         tokenResponse = response.body!!
     }
 
