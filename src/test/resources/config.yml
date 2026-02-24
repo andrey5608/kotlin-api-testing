@@ -18,7 +18,7 @@ testUserEmail: this.is.not.test.anymore@gmail.com
 # Optional: a licenseId that belongs to a DIFFERENT team within the same org.
 # Used in AL-N16: a team-admin key (TEAM_ADMIN_API_KEY) tries to assign this license
 # and should be denied with 403.
-# Leave commented out to skip AL-N16.
+# Comment out to skip AL-N16.
 foreignLicenseId: "QDMBYRUSR5"
 
 # Team-admin API key is NOT stored here — supply via env var:

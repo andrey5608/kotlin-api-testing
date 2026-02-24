@@ -18,11 +18,12 @@
 - Keep tests deterministic: no sleeps, no reliance on local timezone/clock, stable assertions.
 
 ## Configuration / secrets
-- Never commit secrets (ORG_ADMIN_API_KEY, CUSTOMER_CODE, BASE_URL).
-- Read config from env vars or Maven properties:
-  - BASE_URL (required)
+- Non-sensitive config (BASE_URL, CUSTOMER_CODE, team IDs, test email) is committed in
+  `src/test/resources/config.yml`. Override locally via `config.local.yml` (git-ignored).
+- Never commit secrets (API keys such as ORG_ADMIN_API_KEY, TEAM_ADMIN_API_KEY).
+- Read secret values from env vars or Maven properties:
   - ORG_ADMIN_API_KEY (required)
-  - CUSTOMER_CODE (optional if endpoint needs it)
+  - TEAM_ADMIN_API_KEY (optional, required for team-admin negative tests)
 - In CI, use GitHub Actions secrets and pass to Maven as env vars.
 
 ## What to deliver in PRs

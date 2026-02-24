@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test
  * Smoke tests for `GET /token`.
  *
  * SM-01  Valid API key  → 200, role = ADMIN, non-empty teams list.
- * SM-02  Missing X-Api-Key header → 403.
+ * SM-02  Missing X-Api-Key header → 401.
  *
  * Run subset:  mvn -Dgroups=smoke test
  *              mvn -Dtest=TokenSmokeTest test
@@ -60,11 +60,11 @@ class TokenSmokeTest : BaseApiTest() {
     @Test
     @DisplayName("Missing X-Api-Key header returns 401")
     fun missingApiKeyHeaderReturns401() {
-        // Arrange — use the raw helper that sends the request without auth headers
+        // Arrange — use the raw helper that sends X-Customer-Code but omits X-Api-Key
         val expectedStatus = 401
 
         // Act
-        val response = client.getTokenWithoutAuth()
+        val response = client.getTokenWithoutApiKey()
 
         // Assert
         assertThat(response.statusCode)
