@@ -1,0 +1,75 @@
+name: API Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "**" ]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      # ORG_ADMIN_API_KEY is the only secret; all other config lives in src/test/resources/config.yml
+      ORG_ADMIN_API_KEY: ${{ secrets.ORG_ADMIN_API_KEY }}
+      # Prevent ubuntu-latest runner from injecting JVM flags (e.g. --sun-misc-unsafe-memory-access)
+      # that are only valid on JDK 23+ and break earlier runtimes.
+      JAVA_TOOL_OPTIONS: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run API tests
+        run: mvn --no-transfer-progress test
+
+      - name: Load report history
+        uses: actions/checkout@v4
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Build report with history
+        uses: simple-elf/allure-report-action@master
+        if: always()
+        id: allure-report
+        with:
+          allure_results: target/allure-results
+          gh_pages: gh-pages
+          allure_report: allure-report
+          allure_history: allure-history
+          keep_reports: 20
+
+      - name: Upload Allure report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-history/
+          retention-days: 14
+
+      - name: Publish to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
+
+      - name: Print report URL
+        if: always()
+        run: |
+          echo "📊 Allure report: https://andrey5608.github.io/kotlin-api-testing/${{ github.run_number }}/" | tee -a $GITHUB_STEP_SUMMARY

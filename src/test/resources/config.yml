@@ -1,0 +1,26 @@
+# Base test configuration — committed, no secrets here.
+# Override any value locally by creating src/test/resources/config.local.yml (git-ignored).
+
+baseUrl: https://account.jetbrains.com/api/v1
+
+# Your customer code as shown in JetBrains Account next to the company name.
+customerCode: 6703615
+
+# ID of the team that holds unassigned licenses used for assign / transfer tests.
+sourceTeamId: 2785745
+
+# ID of a different team — destination for changeLicensesTeam tests.
+targetTeamId: 2802226
+
+# Email of an org member used as the license assignee in positive tests.
+testUserEmail: this.is.not.test.anymore@gmail.com
+
+# Optional: a licenseId that belongs to a DIFFERENT team within the same org.
+# Used in AL-N16: a team-admin key (TEAM_ADMIN_API_KEY) tries to assign this license
+# and should be denied with 403.
+# Leave commented out to skip AL-N16.
+foreignLicenseId: "QDMBYRUSR5"
+
+# Team-admin API key is NOT stored here — supply via env var:
+#   export TEAM_ADMIN_API_KEY=<team-scoped-api-key>
+# The key must belong to a team admin who does NOT manage foreignLicenseId's team.
