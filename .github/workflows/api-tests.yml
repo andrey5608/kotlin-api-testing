@@ -33,7 +33,7 @@ jobs:
 
       - name: Generate Allure report
         if: always()
-        run: mvn -q allure:report
+        run: mvn --no-transfer-progress allure:report
 
       - name: Upload Allure report
         if: always()
