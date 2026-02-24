@@ -19,13 +19,13 @@ import org.junit.jupiter.api.Test
  * CT-P03  Mixed: some transferable (free), some not (recently assigned).  [see TODO below]
  *
  * Negative:
- * CT-N01  Non-existent targetTeamId = 0              → 400
+ * CT-N01  Non-existent targetTeamId = 0              → 404
  * CT-N02  Empty licenseIds array                     → 400
  * CT-N03  Fake licenseId in array                    → 400 or 200 with all in notTransferred
  * CT-N04  targetTeamId same as source                → 400 or 200 with license in notTransferred
  * CT-N05  Missing targetTeamId field                 → 400
  * CT-N06  Missing licenseIds field                   → 400
- * CT-N07  Invalid API key                            → 403
+ * CT-N07  Invalid API key                            → 401
  * CT-N08  Empty JSON body                            → 400
  *
  * Cleanup: licenses transferred to TARGET_TEAM are moved back to SOURCE_TEAM in @AfterEach.
