@@ -73,7 +73,9 @@ class ChangeLicensesTeamTest : BaseApiTest() {
     @Tag("positive")
     @DisplayName("Transfer single license to TARGET_TEAM returns 200")
     fun transferSingleLicenseToTargetTeamSucceeds() {
-        // Arrange — pick any available (unassigned) license from source team
+        // Arrange — ensure at least 1 transferable license is available, revoking if needed
+        ensureAssignableLicenses(needed = 1, transferable = true)
+
         val licensesResponse = client.getLicenses(
             assignmentStatus = "UNASSIGNED",
             teamId = TestConfig.sourceTeamId
@@ -117,7 +119,9 @@ class ChangeLicensesTeamTest : BaseApiTest() {
     @Tag("positive")
     @DisplayName("Transfer multiple licenses returns 200 and all appear in target team")
     fun transferMultipleLicensesToTargetTeamSucceeds() {
-        // Arrange — need at least 2 free, transferable licenses
+        // Arrange — ensure at least 2 free, transferable licenses are available, revoking if needed
+        ensureAssignableLicenses(needed = 2, transferable = true)
+
         val licensesResponse = client.getLicenses(
             assignmentStatus = "UNASSIGNED",
             teamId = TestConfig.sourceTeamId

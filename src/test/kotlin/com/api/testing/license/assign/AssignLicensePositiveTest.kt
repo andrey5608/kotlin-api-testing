@@ -42,6 +42,13 @@ class AssignLicensePositiveTest : BaseApiTest() {
     @BeforeEach
     fun requireCustomerToken() = assumeCustomerToken()
 
+    /**
+     * Ensure at least one assignable license exists in SOURCE_TEAM_ID before each test.
+     * Revokes previously-assigned licenses if necessary; skips the test if it still can't.
+     */
+    @BeforeEach
+    fun ensureLicenseAvailable() = ensureAssignableLicenses(needed = 1)
+
     private val testContact = AssigneeContactRequest(
         email = TestConfig.testUserEmail,
         firstName = "QA",
