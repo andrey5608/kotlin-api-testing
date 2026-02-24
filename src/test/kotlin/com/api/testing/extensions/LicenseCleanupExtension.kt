@@ -9,7 +9,6 @@ import org.junit.jupiter.api.extension.ExtensionContext
  *
  * Usage:
  * ```kotlin
- * @ExtendWith(LicenseCleanupExtension::class)
  * class MyTest {
  *     @RegisterExtension
  *     val cleanup = LicenseCleanupExtension()
