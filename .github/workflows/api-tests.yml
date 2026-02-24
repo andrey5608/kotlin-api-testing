@@ -13,15 +13,18 @@ jobs:
     env:
       # ORG_ADMIN_API_KEY is the only secret; all other config lives in src/test/resources/config.yml
       ORG_ADMIN_API_KEY: ${{ secrets.ORG_ADMIN_API_KEY }}
+      # Prevent ubuntu-latest runner from injecting JVM flags (e.g. --sun-misc-unsafe-memory-access)
+      # that are only valid on JDK 23+ and break earlier runtimes.
+      JAVA_TOOL_OPTIONS: ""
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: maven
 

@@ -8,7 +8,7 @@ Kotlin 2.1.20 · JUnit 5 · Apache HttpClient 5 · AssertJ · Maven · Allure ·
 
 ## Setup
 
-**Prerequisites:** JDK 17+, Maven 3.8+, `brew install allure`
+**Prerequisites:** JDK 21+, Maven 3.8+, `brew install allure`
 
 **1. Edit `src/test/resources/config.yml`:**
 

@@ -11,7 +11,7 @@
 
     <properties>
         <kotlin.version>2.1.20</kotlin.version>
-        <java.version>17</java.version>
+        <java.version>21</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -156,10 +156,6 @@
                     </systemPropertyVariables>
                     <!-- Lifecycle tests permanently alter state (revoke/rotate); run only with -Plifecycle -->
                     <excludedGroups>lifecycle</excludedGroups>
-                    <configurationParameters>
-                        <!-- You can enable parallel execution here when all tests are proven isolated -->
-                        <!-- junit.jupiter.execution.parallel.enabled=true -->
-                    </configurationParameters>
                 </configuration>
             </plugin>
             <!-- Allure Maven plugin — generates HTML report from target/allure-results -->
