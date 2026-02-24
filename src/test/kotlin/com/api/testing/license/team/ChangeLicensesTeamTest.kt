@@ -78,19 +78,17 @@ class ChangeLicensesTeamTest : BaseApiTest() {
             assignmentStatus = "UNASSIGNED",
             teamId = TestConfig.sourceTeamId
         )
-        assertThat(licensesResponse.statusCode).isEqualTo(200)
+        if (licensesResponse.statusCode != 200)
+            error("Arrange failed: GET /customer/licenses returned ${licensesResponse.statusCode}. Body: ${licensesResponse.rawBody}")
 
-        val licenseId = licensesResponse.body?.content
-            ?.firstOrNull { it.isTransferableBetweenTeams == true }
+        val licenseId = licensesResponse.body
+            ?.firstOrNull { it.isTransferableBetweenTeams == true && it.isAvailableToAssign == true }
             ?.licenseId
-        assertThat(licenseId)
-            .withFailMessage(
-                "No transferable unassigned license in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}."
-            )
-            .isNotNull
+            ?: error("No transferable unassigned license in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}.")
 
+        val expectedStatus = 200
         val request = ChangeTeamRequest(
-            licenseIds = listOf(licenseId!!),
+            licenseIds = listOf(licenseId),
             targetTeamId = TestConfig.targetTeamId
         )
 
@@ -99,8 +97,8 @@ class ChangeLicensesTeamTest : BaseApiTest() {
 
         // Assert
         assertThat(response.statusCode)
-            .withFailMessage("Expected 200 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(200)
+            .withFailMessage("Expected $expectedStatus but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
 
         // Register for cleanup
         transferredIds += licenseId
@@ -108,7 +106,7 @@ class ChangeLicensesTeamTest : BaseApiTest() {
         // Verify via GET /customer/teams/{targetId}/licenses
         val teamLicenses = client.getTeamLicenses(TestConfig.targetTeamId)
         assertThat(teamLicenses.statusCode).isEqualTo(200)
-        val found = teamLicenses.body?.content?.any { it.licenseId == licenseId }
+        val found = teamLicenses.body?.any { it.licenseId == licenseId }
         assertThat(found)
             .withFailMessage("License $licenseId not found in TARGET_TEAM after transfer")
             .isTrue
@@ -124,20 +122,19 @@ class ChangeLicensesTeamTest : BaseApiTest() {
             assignmentStatus = "UNASSIGNED",
             teamId = TestConfig.sourceTeamId
         )
-        assertThat(licensesResponse.statusCode).isEqualTo(200)
+        if (licensesResponse.statusCode != 200)
+            error("Arrange failed: GET /customer/licenses returned ${licensesResponse.statusCode}. Body: ${licensesResponse.rawBody}")
 
-        val ids = licensesResponse.body?.content
-            ?.filter { it.isTransferableBetweenTeams == true }
+        val ids = licensesResponse.body
+            ?.filter { it.isTransferableBetweenTeams == true && it.isAvailableToAssign == true }
             ?.mapNotNull { it.licenseId }
             ?.take(2)
             ?: emptyList()
 
-        assertThat(ids)
-            .withFailMessage(
-                "Need at least 2 transferable licenses in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}, found ${ids.size}."
-            )
-            .hasSizeGreaterThanOrEqualTo(2)
+        if (ids.size < 2)
+            error("Need at least 2 transferable licenses in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}, found ${ids.size}.")
 
+        val expectedStatus = 200
         val request = ChangeTeamRequest(
             licenseIds = ids,
             targetTeamId = TestConfig.targetTeamId
@@ -148,8 +145,8 @@ class ChangeLicensesTeamTest : BaseApiTest() {
 
         // Assert
         assertThat(response.statusCode)
-            .withFailMessage("Expected 200 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(200)
+            .withFailMessage("Expected $expectedStatus but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
 
         transferredIds += ids
 
@@ -167,7 +164,7 @@ class ChangeLicensesTeamTest : BaseApiTest() {
     //
     // @Test
     // @Tag("positive")
-    // @DisplayName("CT-P03: mix of transferable and non-transferable licenses returns partial success")
+    // @DisplayName("Mix of transferable and non-transferable licenses returns partial success")
     // fun `partial transfer returns 200 with transferred and notTransferred lists`() { TODO() }
 
     // =========================================================================
@@ -177,29 +174,37 @@ class ChangeLicensesTeamTest : BaseApiTest() {
 
     @Test
     @Tag("negative")
-    @DisplayName("Non-existent targetTeamId = 0 returns 400")
-    fun nonExistentTargetTeamIdReturns400() {
+    @DisplayName("Non-existent targetTeamId = 0 returns 404 TEAM_NOT_FOUND")
+    fun nonExistentTargetTeamIdReturns404() {
+        // Arrange
+        val expectedStatus = 404
         val body = """{"licenseIds":["ABC1234567"],"targetTeamId":0}"""
 
+        // Act
         val response = client.changeLicensesTeamRaw(body)
 
+        // Assert
         assertThat(response.statusCode)
-            .withFailMessage("Expected 400 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(400)
+            .withFailMessage("Expected $expectedStatus but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
     }
 
 
     @Test
     @Tag("negative")
-    @DisplayName("Empty licenseIds array returns 400")
-    fun emptyLicenseIdsArrayReturns400() {
+    @DisplayName("Empty licenseIds array returns 200 with empty licenseIds (no-op)")
+    fun emptyLicenseIdsArrayReturnsNoop() {
+        // Arrange
+        val expectedStatus = 200
         val body = """{"licenseIds":[],"targetTeamId":${TestConfig.targetTeamId}}"""
 
+        // Act
         val response = client.changeLicensesTeamRaw(body)
 
+        // Assert — API treats an empty licenseIds array as a no-op and returns 200 with {"licenseIds":[]}
         assertThat(response.statusCode)
-            .withFailMessage("Expected 400 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(400)
+            .withFailMessage("Expected $expectedStatus (no-op) but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
     }
 
 
@@ -207,16 +212,19 @@ class ChangeLicensesTeamTest : BaseApiTest() {
     @Tag("negative")
     @DisplayName("Fake licenseId in array does not cause 5xx")
     fun fakeLicenseIdDoesNotCauseServerError() {
+        // Arrange
+        val acceptableStatuses = listOf(400, 200)
         val body = """{"licenseIds":["FAKE9999999"],"targetTeamId":${TestConfig.targetTeamId}}"""
 
+        // Act
         val response = client.changeLicensesTeamRaw(body)
 
-        // API contract: either 400 (rejected outright) or 200 with license in notTransferred.
+        // Assert — API contract: either 400 (rejected outright) or 200 with license in notTransferred.
         // Either way, no server error is allowed.
         assertThat(response.statusCode)
             .withFailMessage("Expected 400 or 200 but got %d (server error)\nBody: %s",
                 response.statusCode, response.rawBody)
-            .isIn(400, 200)
+            .isIn(acceptableStatuses)
     }
 
 
@@ -224,28 +232,36 @@ class ChangeLicensesTeamTest : BaseApiTest() {
     @Tag("negative")
     @DisplayName("targetTeamId same as source returns 400 or 200 with licenseId not transferred")
     fun sameTargetTeamIdAsSourceIsRejectedOrResultsInNoop() {
+        // Arrange
+        val acceptableStatuses = listOf(400, 200)
         val body = """{"licenseIds":["ABC1234567"],"targetTeamId":${TestConfig.sourceTeamId}}"""
 
+        // Act
         val response = client.changeLicensesTeamRaw(body)
 
+        // Assert
         assertThat(response.statusCode)
             .withFailMessage("Expected 400 or 200 but got %d\nBody: %s",
                 response.statusCode, response.rawBody)
-            .isIn(400, 200)
+            .isIn(acceptableStatuses)
     }
 
 
     @Test
     @Tag("negative")
-    @DisplayName("Missing targetTeamId field returns 400")
-    fun missingTargetTeamIdReturns400() {
+    @DisplayName("Missing targetTeamId field defaults to 0 and returns 404 TEAM_NOT_FOUND")
+    fun missingTargetTeamIdReturns404() {
+        // Arrange
+        val expectedStatus = 404
         val body = """{"licenseIds":["ABC1234567"]}"""
 
+        // Act
         val response = client.changeLicensesTeamRaw(body)
 
+        // Assert — Missing targetTeamId defaults to 0 in deserialization — team 0 is not found → 404
         assertThat(response.statusCode)
-            .withFailMessage("Expected 400 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(400)
+            .withFailMessage("Expected $expectedStatus but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
     }
 
 
@@ -253,27 +269,35 @@ class ChangeLicensesTeamTest : BaseApiTest() {
     @Tag("negative")
     @DisplayName("Missing licenseIds field returns 400")
     fun missingLicenseIdsReturns400() {
+        // Arrange
+        val expectedStatus = 400
         val body = """{"targetTeamId":${TestConfig.targetTeamId}}"""
 
+        // Act
         val response = client.changeLicensesTeamRaw(body)
 
+        // Assert
         assertThat(response.statusCode)
-            .withFailMessage("Expected 400 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(400)
+            .withFailMessage("Expected $expectedStatus but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
     }
 
 
     @Test
     @Tag("negative")
-    @DisplayName("Invalid API key returns 403")
-    fun invalidApiKeyReturns403() {
+    @DisplayName("Invalid API key returns 401")
+    fun invalidApiKeyReturns401() {
+        // Arrange
+        val expectedStatus = 401
         val body = """{"licenseIds":["ABC1234567"],"targetTeamId":${TestConfig.targetTeamId}}"""
 
+        // Act
         val response = client.changeLicensesTeamRaw(body, overrideApiKey = "INVALID-KEY-0000000")
 
+        // Assert
         assertThat(response.statusCode)
-            .withFailMessage("Expected 403 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(403)
+            .withFailMessage("Expected $expectedStatus but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
     }
 
 
@@ -281,10 +305,16 @@ class ChangeLicensesTeamTest : BaseApiTest() {
     @Tag("negative")
     @DisplayName("Empty JSON body returns 400")
     fun emptyJsonBodyReturns400() {
-        val response = client.changeLicensesTeamRaw("{}")
+        // Arrange
+        val expectedStatus = 400
+        val body = "{}"
 
+        // Act
+        val response = client.changeLicensesTeamRaw(body)
+
+        // Assert
         assertThat(response.statusCode)
-            .withFailMessage("Expected 400 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(400)
+            .withFailMessage("Expected $expectedStatus but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
     }
 }

@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test
  *   Precondition  — confirm current token works via GET /token.
  *   Act           — POST /token/rotate → 200; record new token in output.
  *   Postcondition — old token → 403 (ApiClient still holds old key); new token shown in output.
- *   NOTE: After LF-02 the API_KEY secret/env var must be updated to the new token.
+ *   NOTE: After LF-02 the ORG_ADMIN_API_KEY secret/env var must be updated to the new token.
  *
  * Each test is fully self-contained; no test relies on pre-existing production data.
  */
@@ -41,14 +41,11 @@ class LifecycleTest : BaseApiTest() {
             assignmentStatus = "UNASSIGNED",
             teamId = TestConfig.sourceTeamId
         )
-        assertThat(licensesResponse.statusCode).isEqualTo(200)
+        if (licensesResponse.statusCode != 200)
+            error("Arrange failed: GET /customer/licenses returned ${licensesResponse.statusCode}. Body: ${licensesResponse.rawBody}")
 
-        val freeId = licensesResponse.body?.content?.firstOrNull()?.licenseId
-        assertThat(freeId)
-            .withFailMessage(
-                "LF-01 precondition: no unassigned license in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}."
-            )
-            .isNotNull
+        val freeId = licensesResponse.body?.firstOrNull()?.licenseId
+            ?: error("No unassigned license in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}.")
 
         val assignResponse = client.assignLicense(
             AssignLicenseRequest(
@@ -62,14 +59,12 @@ class LifecycleTest : BaseApiTest() {
                 licenseId = freeId
             )
         )
-        assertThat(assignResponse.statusCode)
-            .withFailMessage(
-                "LF-01 precondition: assign failed with %d.\nBody: %s",
-                assignResponse.statusCode, assignResponse.rawBody
-            )
-            .isEqualTo(200)
+        if (assignResponse.statusCode != 200)
+            error("Arrange failed: assign returned ${assignResponse.statusCode}. Body: ${assignResponse.rawBody}")
 
-        val licenseId = assignResponse.body?.licenseId ?: freeId!!
+        val licenseId = assignResponse.body?.licenseId ?: freeId
+
+        val expectedStatus = 200
 
         // Act
         val revokeResponse = client.revokeLicense(licenseId)
@@ -77,10 +72,10 @@ class LifecycleTest : BaseApiTest() {
         // Assert
         assertThat(revokeResponse.statusCode)
             .withFailMessage(
-                "Expected 200 from revoke but got %d.\nBody: %s",
+                "Expected $expectedStatus from revoke but got %d.\nBody: %s",
                 revokeResponse.statusCode, revokeResponse.rawBody
             )
-            .isEqualTo(200)
+            .isEqualTo(expectedStatus)
 
         // Postcondition: license must be available to assign again
         val verify = client.getLicenseById(licenseId)
@@ -97,33 +92,36 @@ class LifecycleTest : BaseApiTest() {
     @Test
     @DisplayName("Rotate token — old token is invalidated, new token is printed")
     fun rotateTokenInvalidatesOldToken() {
-        // Precondition — current token works
+        // Arrange — confirm current token is valid
         val preCheck = client.getToken()
-        assertThat(preCheck.statusCode)
-            .withFailMessage("LF-02 precondition: GET /token returned %d", preCheck.statusCode)
-            .isEqualTo(200)
+        if (preCheck.statusCode != 200)
+            error("Arrange failed: GET /token returned ${preCheck.statusCode}. Body: ${preCheck.rawBody}")
+
+        val expectedStatusRotate = 200
+        val expectedStatusOldToken = 403
 
         // Act
         val rotateResponse = client.rotateToken()
 
+        // Assert
         assertThat(rotateResponse.statusCode)
             .withFailMessage(
-                "Expected 200 from POST /token/rotate but got %d.\nBody: %s",
+                "Expected $expectedStatusRotate from POST /token/rotate but got %d.\nBody: %s",
                 rotateResponse.statusCode, rotateResponse.rawBody
             )
-            .isEqualTo(200)
+            .isEqualTo(expectedStatusRotate)
 
-        println("⚠ LF-02: Token rotated successfully. New token body: ${rotateResponse.rawBody}")
-        println("  Update API_KEY secret/env var before running any further tests.")
+        println("⚠ Token rotated successfully. New token body: ${rotateResponse.rawBody}")
+        println("  Update ORG_ADMIN_API_KEY secret/env var before running any further tests.")
 
         // Postcondition — the shared ApiClient still holds the old key; next call must be 403
         val postCheck = client.getToken()
         assertThat(postCheck.statusCode)
             .withFailMessage(
-                "Expected old token to return 403 after rotation but got %d. " +
+                "Expected old token to return $expectedStatusOldToken after rotation but got %d. " +
                     "The token may not have been invalidated immediately.",
                 postCheck.statusCode
             )
-            .isEqualTo(403)
+            .isEqualTo(expectedStatusOldToken)
     }
 }

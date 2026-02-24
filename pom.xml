@@ -93,6 +93,29 @@
         <testSourceDirectory>${project.basedir}/src/test/kotlin</testSourceDirectory>
 
         <plugins>
+            <!-- Clear stale Allure results before every test run (bound to initialize, before compile) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>clean-allure-results</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                        <configuration>
+                            <excludeDefaultDirectories>true</excludeDefaultDirectories>
+                            <filesets>
+                                <fileset>
+                                    <directory>${project.build.directory}/allure-results</directory>
+                                </fileset>
+                            </filesets>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- Kotlin compiler -->
             <plugin>
                 <groupId>org.jetbrains.kotlin</groupId>
@@ -127,7 +150,7 @@
                     </includes>
                     <systemPropertyVariables>
                         <!-- Only the secret is forwarded; everything else lives in config.yml -->
-                        <API_KEY>${API_KEY}</API_KEY>
+                        <ORG_ADMIN_API_KEY>${ORG_ADMIN_API_KEY}</ORG_ADMIN_API_KEY>
                         <!-- Tell Allure where to write results -->
                         <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
                     </systemPropertyVariables>

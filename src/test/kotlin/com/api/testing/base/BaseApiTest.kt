@@ -38,7 +38,7 @@ abstract class BaseApiTest {
         assertThat(response.statusCode)
             .withFailMessage(
                 "Auth check failed — GET /token returned %d. " +
-                    "Verify API_KEY is set and valid.\nBody: %s",
+                    "Verify ORG_ADMIN_API_KEY is set and valid.\nBody: %s",
                 response.statusCode, response.rawBody
             )
             .isEqualTo(200)

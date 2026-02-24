@@ -14,7 +14,7 @@ import org.junit.jupiter.api.extension.ExtensionContext
  *     @RegisterExtension
  *     val cleanup = LicenseCleanupExtension()
  *
- *     fun `some test`() {
+ *     fun someTest() {
  *         val response = client.assignLicense(...)
  *         cleanup.track(response.body!!.licenseId!!)
  *         // ... assertions ...
@@ -39,7 +39,8 @@ class LicenseCleanupExtension : AfterEachCallback {
         licenseIds += licenseId
     }
 
-    override fun afterEach(context: ExtensionContext) {
+    /** Revoke all tracked licenses. Safe to call directly from @AfterEach without an ExtensionContext. */
+    fun cleanupNow() {
         val toCleanup = licenseIds.toList()
         licenseIds.clear()
         toCleanup.forEach { id ->
@@ -59,6 +60,8 @@ class LicenseCleanupExtension : AfterEachCallback {
             }
         }
     }
+
+    override fun afterEach(context: ExtensionContext) = cleanupNow()
 
     fun close() = cleanupClient.close()
 }

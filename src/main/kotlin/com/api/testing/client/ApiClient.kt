@@ -1,12 +1,11 @@
 package com.api.testing.client
 
-import com.api.testing.auth.AuthInterceptor
 import com.api.testing.config.TestConfig
+import com.api.testing.models.request.AssignLicenseFlexRequest
 import com.api.testing.models.request.AssignLicenseRequest
 import com.api.testing.models.request.ChangeTeamRequest
 import com.api.testing.models.response.ChangeTeamResponse
 import com.api.testing.models.response.LicenseResponse
-import com.api.testing.models.response.PagedLicenseResponse
 import com.api.testing.models.response.TokenResponse
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -15,47 +14,48 @@ import org.apache.hc.client5.http.classic.methods.HttpPost
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient
 import org.apache.hc.client5.http.impl.classic.HttpClients
 import org.apache.hc.core5.http.ContentType
+import org.apache.hc.core5.http.HttpRequest
 import org.apache.hc.core5.http.io.entity.EntityUtils
 import org.apache.hc.core5.http.io.entity.StringEntity
 
 /**
  * Thin typed wrapper around Apache HttpClient 5.
  *
- * All calls share the same singleton [CloseableHttpClient] which has [AuthInterceptor] wired in,
- * so every request automatically carries `X-Api-Key` and `X-Customer-Code` headers.
+ * All calls share a single [CloseableHttpClient]. Auth headers (`X-Api-Key`, `X-Customer-Code`)
+ * are added explicitly via [applyAuth] before each request — this keeps auth visible and makes
+ * it trivial to override or omit headers in negative/unauthorised tests without a second client.
  *
- * Error handling: HTTP errors (4xx / 5xx) do NOT throw by default — callers inspect [ApiResponse]
+ * Error handling: HTTP errors (4xx / 5xx) are NOT thrown by default — callers inspect [ApiResponse]
  * and assert on the status code they expect. This makes negative-test assertions explicit.
  */
 class ApiClient(private val baseUrl: String = TestConfig.baseUrl) {
 
     private val gson = Gson()
 
-    /** Authenticated client — [AuthInterceptor] injects X-Api-Key + X-Customer-Code on every request. */
-    private val httpClient: CloseableHttpClient = HttpClients.custom()
-        .addRequestInterceptorFirst(AuthInterceptor())
-        .build()
+    private val httpClient: CloseableHttpClient = HttpClients.createDefault()
 
     /**
-     * Unauthenticated client — no interceptors.
-     * Used by [getTokenWithoutAuth] and by [postRaw] / [changeLicensesTeamRaw] when custom auth
-     * headers must be set precisely (override or absent) without the interceptor overwriting them.
+     * Attaches `X-Api-Key` and `X-Customer-Code` headers to [this] request.
+     * Callers that need to deviate (invalid key, missing header, team-scoped key) pass explicit values.
      */
-    private val rawClient: CloseableHttpClient = HttpClients.createDefault()
+    private fun HttpRequest.applyAuth(
+        apiKey: String = TestConfig.orgAdminKey,
+        customerCode: String = TestConfig.customerCode
+    ) {
+        setHeader("X-Api-Key", apiKey)
+        setHeader("X-Customer-Code", customerCode)
+    }
 
     // Token
 
     /** `GET /token` — returns entity details for the current API key. */
-    fun getToken(): ApiResponse<TokenResponse> =
-        get("/token", TokenResponse::class.java)
+    fun getToken(): ApiResponse<TokenResponse> = get("/token")
 
     /** `GET /token` without auth — used for negative auth tests. */
-    fun getTokenWithoutAuth(): ApiResponse<String> =
-        getRaw("/token", noAuth = true)
+    fun getTokenWithoutAuth(): ApiResponse<String> = get("/token", noAuth = true)
 
     /** `POST /token/rotate` — invalidates the current token and returns a new one. */
-    fun rotateToken(): ApiResponse<String> =
-        postRaw("/token/rotate", "")
+    fun rotateToken(): ApiResponse<String> = post("/token/rotate")
 
     // Licenses
 
@@ -66,29 +66,26 @@ class ApiClient(private val baseUrl: String = TestConfig.baseUrl) {
     fun getLicenses(
         assignmentStatus: String? = null,
         teamId: Int? = null
-    ): ApiResponse<PagedLicenseResponse> {
+    ): ApiResponse<List<LicenseResponse>> {
         val params = buildList {
             assignmentStatus?.let { add("assignmentStatus=$it") }
             teamId?.let { add("teamId=$it") }
         }
         val query = if (params.isEmpty()) "" else "?" + params.joinToString("&")
-        return get("/customer/licenses$query", PagedLicenseResponse::class.java)
+        return getLicenseList("/customer/licenses$query")
     }
 
     /** `GET /customer/licenses/{licenseId}` — returns full license details. */
     fun getLicenseById(licenseId: String): ApiResponse<LicenseResponse> =
-        get("/customer/licenses/$licenseId", LicenseResponse::class.java)
+        get("/customer/licenses/$licenseId")
 
     /** `GET /customer/teams/{teamId}/licenses` — returns licenses assigned to a team. */
-    fun getTeamLicenses(teamId: Int): ApiResponse<PagedLicenseResponse> =
-        get("/customer/teams/$teamId/licenses", PagedLicenseResponse::class.java)
+    fun getTeamLicenses(teamId: Int): ApiResponse<List<LicenseResponse>> =
+        getLicenseList("/customer/teams/$teamId/licenses")
 
-    /**
-     * `POST /customer/licenses/assign` — assigns a license to a contact.
-     * Returns raw [ApiResponse] so tests can inspect status for both positive and negative cases.
-     */
+    /** `POST /customer/licenses/assign` — assigns a license to a contact. */
     fun assignLicense(request: AssignLicenseRequest): ApiResponse<LicenseResponse> =
-        post("/customer/licenses/assign", request, LicenseResponse::class.java)
+        post("/customer/licenses/assign", gson.toJson(request))
 
     /**
      * `POST /customer/licenses/assign` with a custom raw JSON body — used for negative tests
@@ -99,7 +96,19 @@ class ApiClient(private val baseUrl: String = TestConfig.baseUrl) {
         overrideApiKey: String? = null,
         overrideCustomerCode: String? = null
     ): ApiResponse<String> =
-        postRaw("/customer/licenses/assign", rawJson, overrideApiKey, overrideCustomerCode)
+        post("/customer/licenses/assign", rawJson, overrideApiKey, overrideCustomerCode)
+
+    /**
+     * `POST /customer/licenses/assign` from a [AssignLicenseFlexRequest] model — Gson skips null
+     * fields by default, so only explicitly set fields appear in the serialized body.
+     * Ideal for negative / mutation tests without writing raw JSON strings.
+     */
+    fun assignLicenseRaw(
+        request: AssignLicenseFlexRequest,
+        overrideApiKey: String? = null,
+        overrideCustomerCode: String? = null
+    ): ApiResponse<String> =
+        assignLicenseRaw(gson.toJson(request), overrideApiKey, overrideCustomerCode)
 
     /**
      * `POST /customer/licenses/revoke?licenseId={id}` — revokes an assigned license.
@@ -107,13 +116,13 @@ class ApiClient(private val baseUrl: String = TestConfig.baseUrl) {
      * was assigned less than 30 days ago — callers should handle this gracefully.
      */
     fun revokeLicense(licenseId: String): ApiResponse<String> =
-        postRaw("/customer/licenses/revoke?licenseId=$licenseId", "")
+        post("/customer/licenses/revoke?licenseId=$licenseId")
 
     // Change team
 
     /** `POST /customer/changeLicensesTeam` — moves licenses to another team. */
     fun changeLicensesTeam(request: ChangeTeamRequest): ApiResponse<ChangeTeamResponse> =
-        post("/customer/changeLicensesTeam", request, ChangeTeamResponse::class.java)
+        post("/customer/changeLicensesTeam", gson.toJson(request))
 
     /** Raw variant for negative tests. */
     fun changeLicensesTeamRaw(
@@ -121,79 +130,73 @@ class ApiClient(private val baseUrl: String = TestConfig.baseUrl) {
         overrideApiKey: String? = null,
         overrideCustomerCode: String? = null
     ): ApiResponse<String> =
-        postRaw("/customer/changeLicensesTeam", rawJson, overrideApiKey, overrideCustomerCode)
+        post("/customer/changeLicensesTeam", rawJson, overrideApiKey, overrideCustomerCode)
 
     // =========================================================================
     // HTTP helpers
     // =========================================================================
 
-    private fun <T> get(path: String, responseType: Class<T>): ApiResponse<T> {
+    /**
+     * Issues a GET. [noAuth] = true omits auth headers (negative auth tests).
+     * Uses [T::class.java] for deserialization — covers all non-generic response types.
+     * For [List] responses use [getLicenseList].
+     */
+    private inline fun <reified T> get(path: String, noAuth: Boolean = false): ApiResponse<T> {
         val request = HttpGet("$baseUrl$path")
+        if (!noAuth) request.applyAuth()
         return httpClient.execute(request) { response ->
-            val body = EntityUtils.toString(response.entity)
+            val body = EntityUtils.toString(response.entity) ?: ""
             ApiResponse(
                 statusCode = response.code,
-                body = runCatching { gson.fromJson(body, responseType) }.getOrNull(),
+                body = runCatching { gson.fromJson(body, T::class.java) }.getOrNull(),
                 rawBody = body
             )
         }
     }
 
-    private fun getRaw(path: String, noAuth: Boolean = false): ApiResponse<String> {
-        val request = HttpGet("$baseUrl$path")
-        // When noAuth=true, use the plain client that has no interceptors; the headers are simply
-        // never added, which is the correct "missing header" scenario for negative auth tests.
-        val client = if (noAuth) rawClient else httpClient
-        return client.execute(request) { response ->
-            val body = EntityUtils.toString(response.entity)
-            ApiResponse(statusCode = response.code, body = body, rawBody = body)
-        }
-    }
-
-    private fun <T> post(path: String, payload: Any, responseType: Class<T>): ApiResponse<T> {
-        val request = HttpPost("$baseUrl$path")
-        request.entity = StringEntity(gson.toJson(payload), ContentType.APPLICATION_JSON)
+    /** Specialised GET for `List<LicenseResponse>` — preserves generic type info via [TypeToken]. */
+    private fun getLicenseList(path: String): ApiResponse<List<LicenseResponse>> {
+        val request = HttpGet("$baseUrl$path").also { it.applyAuth() }
+        val listType = object : TypeToken<List<LicenseResponse>>() {}.type
         return httpClient.execute(request) { response ->
-            val body = EntityUtils.toString(response.entity)
+            val body = EntityUtils.toString(response.entity) ?: ""
             ApiResponse(
                 statusCode = response.code,
-                body = runCatching { gson.fromJson(body, responseType) }.getOrNull(),
+                body = runCatching { gson.fromJson<List<LicenseResponse>>(body, listType) }.getOrNull(),
                 rawBody = body
             )
         }
     }
 
-    private fun postRaw(
+    /**
+     * Issues a POST. [jsonBody] = null means no request body.
+     * Auth defaults to [TestConfig]; pass overrides for negative auth tests.
+     * Uses [T::class.java] for deserialization — covers all non-generic response types.
+     */
+    private inline fun <reified T> post(
         path: String,
-        rawJson: String,
+        jsonBody: String? = null,
         overrideApiKey: String? = null,
         overrideCustomerCode: String? = null
-    ): ApiResponse<String> {
-        val request = HttpPost("$baseUrl$path")
-        if (rawJson.isNotEmpty()) {
-            request.entity = StringEntity(rawJson, ContentType.APPLICATION_JSON)
+    ): ApiResponse<T> {
+        val request = HttpPost("$baseUrl$path").also {
+            it.applyAuth(
+                apiKey = overrideApiKey ?: TestConfig.orgAdminKey,
+                customerCode = overrideCustomerCode ?: TestConfig.customerCode
+            )
+            jsonBody?.let { body -> it.entity = StringEntity(body, ContentType.APPLICATION_JSON) }
         }
-        // When auth overrides are requested, bypass the interceptor entirely: use rawClient and
-        // set all auth headers manually so the interceptor never overwrites the override value.
-        return if (overrideApiKey != null || overrideCustomerCode != null) {
-            request.setHeader("X-Api-Key", overrideApiKey ?: TestConfig.apiKey)
-            request.setHeader("X-Customer-Code", overrideCustomerCode ?: TestConfig.customerCode)
-            rawClient.execute(request) { response ->
-                val body = EntityUtils.toString(response.entity)
-                ApiResponse(statusCode = response.code, body = body, rawBody = body)
-            }
-        } else {
-            httpClient.execute(request) { response ->
-                val body = EntityUtils.toString(response.entity)
-                ApiResponse(statusCode = response.code, body = body, rawBody = body)
-            }
+        return httpClient.execute(request) { response ->
+            val body = EntityUtils.toString(response.entity) ?: ""
+            ApiResponse(
+                statusCode = response.code,
+                body = runCatching { gson.fromJson(body, T::class.java) }.getOrNull(),
+                rawBody = body
+            )
         }
     }
 
-    fun close() {
-        httpClient.close()
-        rawClient.close()
-    }
+    fun close() = httpClient.close()
 }
 
 /**

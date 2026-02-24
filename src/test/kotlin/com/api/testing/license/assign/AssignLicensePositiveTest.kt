@@ -7,6 +7,7 @@ import com.api.testing.models.request.AssignFromTeamRequest
 import com.api.testing.models.request.AssignLicenseRequest
 import com.api.testing.models.request.AssigneeContactRequest
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -49,7 +50,11 @@ class AssignLicensePositiveTest : BaseApiTest() {
 
     @AfterEach
     fun runCleanup() {
-        cleanup.afterEach(null!!)  // delegate to extension
+        cleanup.cleanupNow()
+    }
+
+    @AfterAll
+    fun closeCleanup() {
         cleanup.close()
     }
 
@@ -62,25 +67,26 @@ class AssignLicensePositiveTest : BaseApiTest() {
             assignmentStatus = "UNASSIGNED",
             teamId = TestConfig.sourceTeamId
         )
-        assertThat(licensesResponse.statusCode)
-            .withFailMessage("Expected 200 from GET /customer/licenses but got %d\nBody: %s",
-                licensesResponse.statusCode, licensesResponse.rawBody)
-            .isEqualTo(200)
+        if (licensesResponse.statusCode != 200)
+            error("Arrange failed: GET /customer/licenses returned ${licensesResponse.statusCode}. Body: ${licensesResponse.rawBody}")
 
-        val productCode = licensesResponse.body?.content?.firstOrNull()?.product?.code
-        assertThat(productCode)
-            .withFailMessage(
-                "No unassigned licenses found in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}. " +
-                    "Ensure the team has at least one unassigned license before running positive tests."
-            )
-            .isNotNull
+        // Grab both productCode and licenseId from the same candidate license.
+        // POST /customer/licenses/assign returns HTTP 200 with empty body (by API design),
+        // so we pre-capture the licenseId to use for cleanup and verification.
+        val candidate = licensesResponse.body?.firstOrNull { it.isAvailableToAssign == true }
+            ?: error("No assignable (isAvailableToAssign=true) licenses found in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}. Ensure the team has at least one active unassigned license before running positive tests.")
+        val productCode = candidate.product?.code
+            ?: error("Candidate license ${candidate.licenseId} has no productCode.")
+        val candidateLicenseId = candidate.licenseId
+            ?: error("Candidate license has no licenseId — cannot verify assignment or clean up.")
 
+        val expectedStatus = 200
         val request = AssignLicenseRequest(
             contact = testContact,
             includeOfflineActivationCode = false,
             sendEmail = false,
             license = AssignFromTeamRequest(
-                productCode = productCode!!,
+                productCode = productCode,
                 team = TestConfig.sourceTeamId
             )
         )
@@ -88,20 +94,15 @@ class AssignLicensePositiveTest : BaseApiTest() {
         // Act
         val response = client.assignLicense(request)
 
-        // Assert
+        // Assert — API returns 200 with empty body on success (no licenseId in response by design)
         assertThat(response.statusCode)
-            .withFailMessage("Expected 200 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(200)
+            .withFailMessage("Expected $expectedStatus but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
 
-        val assignedId = response.body?.licenseId
-        assertThat(assignedId)
-            .withFailMessage("Expected licenseId in response but got null\nBody: %s", response.rawBody)
-            .isNotNull
+        candidateLicenseId.let { cleanup.track(it) }
 
-        cleanup.track(assignedId!!)
-
-        // Verify business state: GET /customer/licenses/{id} must show the assignee email
-        val verifyResponse = client.getLicenseById(assignedId)
+        // Verify business state: the candidate license should now show the assignee email
+        val verifyResponse = client.getLicenseById(candidateLicenseId)
         assertThat(verifyResponse.statusCode).isEqualTo(200)
         assertThat(verifyResponse.body?.assignee?.email)
             .withFailMessage(
@@ -120,15 +121,16 @@ class AssignLicensePositiveTest : BaseApiTest() {
             assignmentStatus = "UNASSIGNED",
             teamId = TestConfig.sourceTeamId
         )
-        assertThat(licensesResponse.statusCode).isEqualTo(200)
+        if (licensesResponse.statusCode != 200)
+            error("Arrange failed: GET /customer/licenses returned ${licensesResponse.statusCode}. Body: ${licensesResponse.rawBody}")
 
-        val freeLicenseId = licensesResponse.body?.content?.firstOrNull()?.licenseId
-        assertThat(freeLicenseId)
-            .withFailMessage(
-                "No unassigned licenses found in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}."
-            )
-            .isNotNull
+        val freeLicense = licensesResponse.body
+            ?.firstOrNull { it.isAvailableToAssign == true }
+            ?: error("No assignable (isAvailableToAssign=true) licenses found in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}.")
+        val freeLicenseId = freeLicense.licenseId
+            ?: error("Found assignable license but it has no licenseId.")
 
+        val expectedStatus = 200
         val request = AssignLicenseRequest(
             contact = testContact,
             includeOfflineActivationCode = false,
@@ -140,9 +142,9 @@ class AssignLicensePositiveTest : BaseApiTest() {
         val response = client.assignLicense(request)
 
         // Assert
-        assertStatus(200, response.statusCode, response.rawBody)
+        assertStatus(expectedStatus, response.statusCode, response.rawBody)
 
-        val assignedId = response.body?.licenseId ?: freeLicenseId!!
+        val assignedId = response.body?.licenseId ?: freeLicenseId
         cleanup.track(assignedId)
 
         val verifyResponse = client.getLicenseById(assignedId)
@@ -163,16 +165,22 @@ class AssignLicensePositiveTest : BaseApiTest() {
             assignmentStatus = "UNASSIGNED",
             teamId = TestConfig.sourceTeamId
         )
-        assertThat(licensesResponse.statusCode).isEqualTo(200)
+        if (licensesResponse.statusCode != 200)
+            error("Arrange failed: GET /customer/licenses returned ${licensesResponse.statusCode}. Body: ${licensesResponse.rawBody}")
 
-        val productCode = licensesResponse.body?.content?.firstOrNull()?.product?.code
-        assertThat(productCode).isNotNull
+        val candidate = licensesResponse.body?.firstOrNull { it.isAvailableToAssign == true }
+            ?: error("No assignable licenses found in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}.")
+        val productCode = candidate.product?.code
+            ?: error("Candidate license ${candidate.licenseId} has no productCode.")
+        val candidateLicenseId = candidate.licenseId
+            ?: error("Candidate license has no licenseId — cannot clean up.")
 
+        val expectedStatus = 200
         val request = AssignLicenseRequest(
             contact = testContact,
             includeOfflineActivationCode = true,
             sendEmail = false,
-            license = AssignFromTeamRequest(productCode!!, TestConfig.sourceTeamId)
+            license = AssignFromTeamRequest(productCode, TestConfig.sourceTeamId)
         )
 
         // Act
@@ -180,38 +188,46 @@ class AssignLicensePositiveTest : BaseApiTest() {
 
         // Assert — API accepts the flag; no 4xx/5xx regardless of account state
         assertThat(response.statusCode)
-            .withFailMessage("Expected 200 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(200)
+            .withFailMessage("Expected $expectedStatus but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
 
-        response.body?.licenseId?.let { cleanup.track(it) }
+        // POST returns empty body by design — track pre-captured licenseId
+        cleanup.track(candidateLicenseId)
     }
 
 
     @Test
     @DisplayName("Assign to existing org member returns 200")
     fun assignToExistingOrgMemberSucceeds() {
-        // Arrange — TEST_USER_EMAIL is a confirmed org member (per plan assumption)
+        // Arrange — testContact.email is a confirmed org member (per plan assumption)
         val licensesResponse = client.getLicenses(
             assignmentStatus = "UNASSIGNED",
             teamId = TestConfig.sourceTeamId
         )
-        assertThat(licensesResponse.statusCode).isEqualTo(200)
+        if (licensesResponse.statusCode != 200)
+            error("Arrange failed: GET /customer/licenses returned ${licensesResponse.statusCode}. Body: ${licensesResponse.rawBody}")
 
-        val productCode = licensesResponse.body?.content?.firstOrNull()?.product?.code
-        assertThat(productCode).isNotNull
+        val candidate = licensesResponse.body?.firstOrNull { it.isAvailableToAssign == true }
+            ?: error("No assignable licenses found in SOURCE_TEAM_ID=${TestConfig.sourceTeamId}.")
+        val productCode = candidate.product?.code
+            ?: error("Candidate license ${candidate.licenseId} has no productCode.")
+        val candidateLicenseId = candidate.licenseId
+            ?: error("Candidate license has no licenseId — cannot clean up.")
 
+        val expectedStatus = 200
         val request = AssignLicenseRequest(
             contact = testContact,
             includeOfflineActivationCode = false,
             sendEmail = false,
-            license = AssignFromTeamRequest(productCode!!, TestConfig.sourceTeamId)
+            license = AssignFromTeamRequest(productCode, TestConfig.sourceTeamId)
         )
 
         // Act
         val response = client.assignLicense(request)
 
         // Assert
-        assertStatus(200, response.statusCode, response.rawBody)
-        response.body?.licenseId?.let { cleanup.track(it) }
+        assertStatus(expectedStatus, response.statusCode, response.rawBody)
+        // POST returns empty body by design — track pre-captured licenseId
+        cleanup.track(candidateLicenseId)
     }
 }

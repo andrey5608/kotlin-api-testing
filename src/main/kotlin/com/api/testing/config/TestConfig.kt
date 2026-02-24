@@ -9,19 +9,34 @@ import org.yaml.snakeyaml.Yaml
  *   1. `src/test/resources/config.yml`       — committed base config (no secrets)
  *   2. `src/test/resources/config.local.yml` — optional local override (git-ignored)
  *
- * The only secret is [apiKey], which must be supplied via the `API_KEY` environment variable
- * (or `-DAPI_KEY=…` Maven property). Everything else lives in config.yml.
+ * The only secret is [apiKey], which must be supplied via the `ORG_ADMIN_API_KEY` environment variable
+ * (or `-DORG_ADMIN_API_KEY=…` Maven property). Everything else lives in config.yml.
  */
 object TestConfig {
 
     private val props: Map<String, Any> = loadConfig()
 
-    val baseUrl: String     = get("baseUrl")
-    val apiKey: String      = requireSecret("API_KEY")
-    val customerCode: String = get("customerCode")
-    val sourceTeamId: Int   = get("sourceTeamId").toInt()
-    val targetTeamId: Int   = get("targetTeamId").toInt()
+    val baseUrl: String        = get("baseUrl")
+    val orgAdminKey: String    = requireSecret("ORG_ADMIN_API_KEY")
+    val customerCode: String   = get("customerCode")
+    val sourceTeamId: Int    = get("sourceTeamId").toInt()
+    val targetTeamId: Int    = get("targetTeamId").toInt()
     val testUserEmail: String = get("testUserEmail")
+
+    /**
+     * Optional: a licenseId that belongs to a different team within the same org.
+     * When set together with [teamAdminKey], used in AL-N16 to verify a team admin
+     * cannot assign a license owned by a different team.
+     * Leave blank or omit from config.yml to skip that test case.
+     */
+    val foreignLicenseId: String? = getOptional("foreignLicenseId")
+
+    /**
+     * Optional: API key scoped to a single team (team admin key for [sourceTeamId]).
+     * Required for AL-N16: must NOT have access to the team that owns [foreignLicenseId].
+     * Set via environment variable `TEAM_ADMIN_API_KEY`; never commit to config files.
+     */
+    val teamAdminKey: String? = getOptionalSecret("TEAM_ADMIN_API_KEY")
 
     // Loader
 
@@ -51,6 +66,17 @@ object TestConfig {
             ?: error(
                 "Required config key '$key' not found in config.yml or config.local.yml."
             )
+
+    private fun getOptional(key: String): String? =
+        props[key]?.toString()?.takeIf { it.isNotBlank() }
+
+    /**
+     * Reads an optional secret from env vars or Maven `-D` properties.
+     * Returns null if not set — callers should skip the test with `assumeTrue`.
+     */
+    private fun getOptionalSecret(envVar: String): String? =
+        System.getenv(envVar)?.takeIf { it.isNotBlank() }
+            ?: System.getProperty(envVar)?.takeIf { it.isNotBlank() }
 
     /**
      * Reads a secret value from environment variables or Maven `-D` system properties.

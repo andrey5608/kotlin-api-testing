@@ -42,3 +42,4 @@ src/test/resources/config.local.yml
 .idea/
 *.iml
 /docs/qa/files
+/allure-report

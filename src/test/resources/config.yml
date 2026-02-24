@@ -10,7 +10,17 @@ customerCode: 6703615
 sourceTeamId: 2785745
 
 # ID of a different team — destination for changeLicensesTeam tests.
-targetTeamId: 2222
+targetTeamId: 2802226
 
 # Email of an org member used as the license assignee in positive tests.
-testUserEmail: qa.automation@example.com
+testUserEmail: this.is.not.test.anymore@gmail.com
+
+# Optional: a licenseId that belongs to a DIFFERENT team within the same org.
+# Used in AL-N16: a team-admin key (TEAM_ADMIN_API_KEY) tries to assign this license
+# and should be denied with 403.
+# Leave commented out to skip AL-N16.
+foreignLicenseId: "QDMBYRUSR5"
+
+# Team-admin API key is NOT stored here — supply via env var:
+#   export TEAM_ADMIN_API_KEY=<team-scoped-api-key>
+# The key must belong to a team admin who does NOT manage foreignLicenseId's team.

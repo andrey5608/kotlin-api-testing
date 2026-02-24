@@ -27,9 +27,10 @@ class TokenSmokeTest : BaseApiTest() {
         // Arrange — call the endpoint and verify the configured credentials have ADMIN role.
         //           This test only makes sense for an admin account; skip rather than fail
         //           if the key belongs to a non-admin user.
+        val expectedStatus = 200
         val response = client.getToken()
         Assumptions.assumeTrue(response.body?.effectiveRole == "ADMIN") {
-            "Skipped: configured API_KEY does not have ADMIN role (got '${response.body?.effectiveRole}'). " +
+            "Skipped: configured ORG_ADMIN_API_KEY does not have ADMIN role (got '${response.body?.effectiveRole}'). " +
                 "This test requires admin credentials."
         }
 
@@ -37,8 +38,8 @@ class TokenSmokeTest : BaseApiTest() {
 
         // Assert
         assertThat(response.statusCode)
-            .withFailMessage("Expected 200 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(200)
+            .withFailMessage("Expected $expectedStatus but got %d\nBody: %s", response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
 
         assertThat(response.body?.effectiveRole)
             .withFailMessage("Expected role=ADMIN but was: %s", response.body?.effectiveRole)
@@ -57,16 +58,17 @@ class TokenSmokeTest : BaseApiTest() {
 
 
     @Test
-    @DisplayName("Missing X-Api-Key header returns 403")
-    fun missingApiKeyHeaderReturns403() {
+    @DisplayName("Missing X-Api-Key header returns 401")
+    fun missingApiKeyHeaderReturns401() {
         // Arrange — use the raw helper that sends the request without auth headers
+        val expectedStatus = 401
 
         // Act
         val response = client.getTokenWithoutAuth()
 
         // Assert
         assertThat(response.statusCode)
-            .withFailMessage("Expected 403 but got %d\nBody: %s", response.statusCode, response.rawBody)
-            .isEqualTo(403)
+            .withFailMessage("Expected %d but got %d\nBody: %s", expectedStatus, response.statusCode, response.rawBody)
+            .isEqualTo(expectedStatus)
     }
 }

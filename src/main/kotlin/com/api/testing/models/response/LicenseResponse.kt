@@ -49,13 +49,3 @@ data class LicenseResponse(
     )
 }
 
-/**
- * Wrapper for paged list endpoints like `GET /customer/licenses`.
- */
-data class PagedLicenseResponse(
-    val content: List<LicenseResponse>?,
-    val totalElements: Int?,
-    val totalPages: Int?,
-    val size: Int?,
-    val number: Int?
-)

@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # API_KEY is the only secret; all other config lives in src/test/resources/config.yml
-      API_KEY: ${{ secrets.API_KEY }}
+      # ORG_ADMIN_API_KEY is the only secret; all other config lives in src/test/resources/config.yml
+      ORG_ADMIN_API_KEY: ${{ secrets.ORG_ADMIN_API_KEY }}
 
     steps:
       - name: Checkout
