@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test
  * Smoke tests for `GET /token`.
  *
  * SM-01  Valid API key  → 200, role = ADMIN, non-empty teams list.
- * SM-02  Missing X-Api-Key header → 403.
+ * SM-02  Missing X-Api-Key header → 401.
  *
  * Run subset:  mvn -Dgroups=smoke test
  *              mvn -Dtest=TokenSmokeTest test

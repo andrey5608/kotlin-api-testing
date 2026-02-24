@@ -42,6 +42,14 @@ abstract class BaseApiTest {
                 response.statusCode, response.rawBody
             )
             .isEqualTo(200)
+
+        assertThat(response.body)
+            .withFailMessage(
+                "Auth check failed — GET /token returned 200 but the response body was null. " +
+                    "Verify ORG_ADMIN_API_KEY is set and valid.\nBody: %s",
+                response.rawBody
+            )
+            .isNotNull
         tokenResponse = response.body!!
     }
 
