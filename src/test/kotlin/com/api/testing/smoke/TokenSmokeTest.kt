@@ -60,11 +60,11 @@ class TokenSmokeTest : BaseApiTest() {
     @Test
     @DisplayName("Missing X-Api-Key header returns 401")
     fun missingApiKeyHeaderReturns401() {
-        // Arrange — use the raw helper that sends the request without auth headers
+        // Arrange — use the raw helper that sends X-Customer-Code but omits X-Api-Key
         val expectedStatus = 401
 
         // Act
-        val response = client.getTokenWithoutAuth()
+        val response = client.getTokenWithoutApiKey()
 
         // Assert
         assertThat(response.statusCode)
