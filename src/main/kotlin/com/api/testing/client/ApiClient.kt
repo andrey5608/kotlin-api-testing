@@ -145,7 +145,7 @@ class ApiClient(private val baseUrl: String = TestConfig.baseUrl) {
         val request = HttpGet("$baseUrl$path")
         if (!noAuth) request.applyAuth()
         return httpClient.execute(request) { response ->
-            val body = EntityUtils.toString(response.entity) ?: ""
+            val body = response.entity?.let { EntityUtils.toString(it) } ?: ""
             ApiResponse(
                 statusCode = response.code,
                 body = runCatching { gson.fromJson(body, T::class.java) }.getOrNull(),
@@ -159,7 +159,7 @@ class ApiClient(private val baseUrl: String = TestConfig.baseUrl) {
         val request = HttpGet("$baseUrl$path").also { it.applyAuth() }
         val listType = object : TypeToken<List<LicenseResponse>>() {}.type
         return httpClient.execute(request) { response ->
-            val body = EntityUtils.toString(response.entity) ?: ""
+            val body = response.entity?.let { EntityUtils.toString(it) } ?: ""
             ApiResponse(
                 statusCode = response.code,
                 body = runCatching { gson.fromJson<List<LicenseResponse>>(body, listType) }.getOrNull(),
@@ -187,7 +187,7 @@ class ApiClient(private val baseUrl: String = TestConfig.baseUrl) {
             jsonBody?.let { body -> it.entity = StringEntity(body, ContentType.APPLICATION_JSON) }
         }
         return httpClient.execute(request) { response ->
-            val body = EntityUtils.toString(response.entity) ?: ""
+            val body = response.entity?.let { EntityUtils.toString(it) } ?: ""
             ApiResponse(
                 statusCode = response.code,
                 body = runCatching { gson.fromJson(body, T::class.java) }.getOrNull(),
