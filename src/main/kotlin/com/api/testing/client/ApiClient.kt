@@ -51,8 +51,8 @@ class ApiClient(private val baseUrl: String = TestConfig.baseUrl) {
     /** `GET /token` — returns entity details for the current API key. */
     fun getToken(): ApiResponse<TokenResponse> = get("/token")
 
-    /** `GET /token` without auth — used for negative auth tests. */
-    fun getTokenWithoutAuth(): ApiResponse<String> = get("/token", noAuth = true)
+    /** `GET /token` without `X-Api-Key` (but with `X-Customer-Code`) — used for negative auth tests. */
+    fun getTokenWithoutApiKey(): ApiResponse<String> = get("/token", omitApiKey = true)
 
     /** `POST /token/rotate` — invalidates the current token and returns a new one. */
     fun rotateToken(): ApiResponse<String> = post("/token/rotate")
@@ -137,13 +137,17 @@ class ApiClient(private val baseUrl: String = TestConfig.baseUrl) {
     // =========================================================================
 
     /**
-     * Issues a GET. [noAuth] = true omits auth headers (negative auth tests).
+     * Issues a GET. [omitApiKey] = true sends only `X-Customer-Code`, omitting `X-Api-Key` (negative auth tests).
      * Uses [T::class.java] for deserialization — covers all non-generic response types.
      * For [List] responses use [getLicenseList].
      */
-    private inline fun <reified T> get(path: String, noAuth: Boolean = false): ApiResponse<T> {
+    private inline fun <reified T> get(path: String, omitApiKey: Boolean = false): ApiResponse<T> {
         val request = HttpGet("$baseUrl$path")
-        if (!noAuth) request.applyAuth()
+        if (!omitApiKey) {
+            request.applyAuth()
+        } else {
+            request.setHeader("X-Customer-Code", TestConfig.customerCode)
+        }
         return httpClient.execute(request) { response ->
             val body = EntityUtils.toString(response.entity) ?: ""
             ApiResponse(
